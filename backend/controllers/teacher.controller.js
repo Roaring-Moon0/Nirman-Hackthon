@@ -283,3 +283,76 @@ export const getStudentAnalytics = async (req, res) => {
   }
 };
 
+export const getTeacherClasses = async (req, res) => {
+  try {
+    const teacher = await Teacher.findOne({ userId: req.user.userId });
+
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" });
+    }
+
+    const classAssignments = await ClassAssignment.find({
+      teacherId: teacher._id,
+    })
+      .populate("classId", "classCode year section department")
+      .populate("subjectId", "subjectName subjectCode");
+
+    const classes = classAssignments.map((assignment) => ({
+      class: assignment.classId,
+      subject: assignment.subjectId,
+    }));
+
+    res.json({
+      classes,
+      teacherId: teacher._id,
+      teacherName: teacher.name,
+    });
+  } catch (error) {
+    console.error("Error fetching teacher classes:", error);
+    res.status(500).json({ message: "Failed to fetch classes" });
+  }
+};
+
+/**
+ * Get students by classId for a teacher
+ */
+export const getStudentsByClass = async (req, res) => {
+  try {
+    const { classId } = req.params;
+    const teacher = await Teacher.findOne({ userId: req.user.userId });
+
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" });
+    }
+
+    // Verify teacher teaches this class
+    const assignment = await ClassAssignment.findOne({
+      teacherId: teacher._id,
+      classId: classId,
+    });
+
+    if (!assignment) {
+      return res
+        .status(403)
+        .json({ message: "You are not assigned to this class" });
+    }
+
+    const students = await Student.find({ classId }).populate(
+      "userId",
+      "loginId",
+    );
+
+    res.json({
+      students: students.map((s) => ({
+        _id: s._id,
+        name: s.name,
+        rollNo: s.rollNo,
+        email: s.email,
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching students:", error);
+    res.status(500).json({ message: "Failed to fetch students" });
+  }
+};
+

@@ -5,6 +5,43 @@ import { Submission } from "../models/Submission.js";
 import { calculateMarksTrend } from "../utils/marksUtils.js";
 
 /**
+ * Detect abnormal changes from baseline (Silent Struggle)
+ */
+const detectSilentStruggle = async (studentId, classId) => {
+  try {
+    // 1. Get baseline (past 30 records, excluding latest 7)
+    const totalRecords = await Attendance.find({ studentId, classId })
+      .sort({ date: -1 })
+      .limit(37);
+
+    if (totalRecords.length < 15) return { detected: false };
+
+    const latest7 = totalRecords.slice(0, 7);
+    const baseline = totalRecords.slice(7);
+
+    const latest7Present = latest7.filter((r) => r.isPresent).length;
+    const baselinePresent = baseline.filter((r) => r.isPresent).length;
+
+    const latestRate = latest7Present / 7;
+    const baselineRate = baselinePresent / baseline.length;
+
+    // Detect > 20% decline in attendance pattern
+    if (baselineRate > 0.5 && latestRate < baselineRate * 0.8) {
+      return {
+        detected: true,
+        reason: "Sudden attendance drop compared to your usual pattern",
+        severity: "Medium",
+      };
+    }
+
+    return { detected: false };
+  } catch (error) {
+    console.warn("Silent struggle detection error:", error.message);
+    return { detected: false };
+  }
+};
+
+/**
  * Aggregate academic metrics required for AI risk prediction
  */
 export const aggregateStudentRiskData = async (studentId, classId) => {
@@ -55,9 +92,7 @@ export const aggregateStudentRiskData = async (studentId, classId) => {
     });
 
     const assignmentSubmissionRate =
-      totalAssignments > 0
-        ? submittedAssignments / totalAssignments
-        : 0;
+      totalAssignments > 0 ? submittedAssignments / totalAssignments : 0;
 
     /* -------------------- MARKS TREND (NUMERIC) -------------------- */
     let marksTrend = 0;
@@ -69,7 +104,7 @@ export const aggregateStudentRiskData = async (studentId, classId) => {
     if (latestMarks) {
       const trendValue = await calculateMarksTrend(
         studentId,
-        latestMarks.subjectId
+        latestMarks.subjectId,
       );
 
       // Ensure numeric value only
@@ -81,9 +116,7 @@ export const aggregateStudentRiskData = async (studentId, classId) => {
     return {
       attendancePercentage: Number(attendancePercentage.toFixed(2)),
       absenceStreak,
-      assignmentSubmissionRate: Number(
-        assignmentSubmissionRate.toFixed(2)
-      ),
+      assignmentSubmissionRate: Number(assignmentSubmissionRate.toFixed(2)),
       marksTrend,
     };
   } catch (error) {
@@ -111,11 +144,9 @@ export const getPredictionFromAI = async (riskMetrics) => {
       absence_streak: riskMetrics.absenceStreak,
     };
 
-    const response = await axios.post(
-      `${aiServiceUrl}/predict`,
-      aiPayload,
-      { timeout: 15000 }
-    );
+    const response = await axios.post(`${aiServiceUrl}/predict`, aiPayload, {
+      timeout: 15000,
+    });
 
     return {
       riskScore: response.data.risk_score,
@@ -141,8 +172,17 @@ export const generateRiskAssessment = async (studentId, classId) => {
   try {
     const metrics = await aggregateStudentRiskData(studentId, classId);
     const aiResult = await getPredictionFromAI(metrics);
+    const silentStruggle = await detectSilentStruggle(studentId, classId);
 
-    return {
+    // Softening language as per requirement
+    const riskLabelMap = {
+      high: "Critical Support Needed",
+      medium: "Needs Moderate Attention",
+      low: "On Track",
+      service_unavailable: "Analysis Pending",
+    };
+
+    const result = {
       studentId,
       classId,
       metrics: {
@@ -153,11 +193,20 @@ export const generateRiskAssessment = async (studentId, classId) => {
       },
       risk: {
         score: aiResult.riskScore,
-        label: aiResult.riskLabel,
+        label: riskLabelMap[aiResult.riskLabel] || aiResult.riskLabel,
         reasons: aiResult.reasons,
       },
+      silentStruggle,
       generatedAt: new Date(),
     };
+
+    // If silent struggle detected, promote to medium risk if it was low
+    if (silentStruggle.detected && result.risk.label === "On Track") {
+      result.risk.label = "Pattern Change Detected";
+      result.risk.reasons.unshift(silentStruggle.reason);
+    }
+
+    return result;
   } catch (error) {
     console.error("Error generating risk assessment:", error);
     throw error;

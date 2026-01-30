@@ -39,14 +39,22 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    isOverridden: {
+      type: Boolean,
+      default: false,
+    },
+    overrideReason: {
+      type: String,
+      default: "",
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Ensure unique attendance record per student-class-subject-timetable-date
 attendanceSchema.index(
   { studentId: 1, classId: 1, subjectId: 1, timetableId: 1, date: 1 },
-  { unique: true }
+  { unique: true },
 );
 
 export const Attendance = mongoose.model("Attendance", attendanceSchema);

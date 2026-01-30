@@ -1,129 +1,168 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import Input from '../components/Input'
-import Button from '../components/Button'
-import { ROLES } from '../utils/constants'
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL, ENDPOINTS } from '../utils/constants';
+import { GraduationCap, Users, Lock, LogIn, AlertCircle } from 'lucide-react';
 
 const LoginPage = () => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  
   const [formData, setFormData] = useState({
+    role: 'student',
     loginId: '',
-    password: '',
-    role: ROLES.STUDENT
-  })
+    password: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    // Store mock user data
-    localStorage.setItem('user', JSON.stringify({ role: formData.role, loginId: formData.loginId }))
-    localStorage.setItem('token', 'mock-jwt-token')
-    
-    // Navigate based on role
-    if (formData.role === ROLES.ADMIN) navigate('/admin')
-    else if (formData.role === ROLES.TEACHER) navigate('/teacher')
-    else navigate('/student')
-  }
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (error) setError('');
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}${ENDPOINTS.LOGIN}`, {
+        loginId: formData.loginId,
+        password: formData.password
+      });
+
+      const { token, role, ...profile } = response.data;
+      
+      // Flatten profile for context
+      const userForContext = {
+        role,
+        name: profile.name,
+        // If classId is populated object, use name, else use id or fallback
+        className: profile.classId?.name || profile.classId || 'Class N/A', 
+        ...profile 
+      };
+      
+      // Save to AuthContext (which saves to localStorage)
+      login(userForContext, token);
+
+      // Navigate based on role
+      if (role === 'teacher') {
+        navigate('/teacher');
+      } else {
+        navigate('/student');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      setLoading(false);
+    }
+  };
+
+  const getRoleIcon = () => formData.role === 'student' ? <GraduationCap size={20} /> : <Users size={20} />;
+  const getLoginIdLabel = () => formData.role === 'student' ? 'Roll Number' : 'Employee ID';
+  const getLoginIdPlaceholder = () => formData.role === 'student' ? 'e.g.S001' : 'e.g. T001';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-900 to-pink-900 flex items-center justify-center p-6">
-      {/* Background Effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 -left-20 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-pink-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-white rounded-2xl shadow-2xl p-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
+              <LogIn size={32} className="text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
+            <p className="text-gray-500 mt-2">Academic ERP System</p>
+          </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        {/* Logo/Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-5xl font-black text-white mb-2">NIRMAN</h1>
-          <p className="text-purple-200 text-lg">Education Management System</p>
-        </div>
-
-        {/* Login Card */}
-        <div className="bg-white/10 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/20 p-8">
-          <h2 className="text-2xl font-bold text-white mb-6 text-center">Welcome Back</h2>
-          
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Role Selection */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-purple-200 mb-3">Select Role</label>
-              <div className="grid grid-cols-3 gap-3">
-                {Object.values(ROLES).map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role })}
-                    className={`
-                      py-3 px-4 rounded-lg font-semibold capitalize transition-all duration-200
-                      ${formData.role === role 
-                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg' 
-                        : 'bg-white/10 text-purple-200 hover:bg-white/20'
-                      }
-                    `}
-                  >
-                    {role}
-                  </button>
-                ))}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Login As
+              </label>
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                  {getRoleIcon()}
+                </div>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleInputChange}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                >
+                  <option value="student">Student</option>
+                  <option value="teacher">Teacher</option>
+                </select>
               </div>
             </div>
 
             {/* Login ID */}
-            <div className="mb-4">
-              <Input
-                label="Login ID"
-                type="text"
-                placeholder="Enter your login ID"
-                value={formData.loginId}
-                onChange={(e) => setFormData({ ...formData, loginId: e.target.value })}
-                required
-                icon={
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                }
-              />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                {getLoginIdLabel()}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="loginId"
+                  value={formData.loginId}
+                  onChange={handleInputChange}
+                  placeholder={getLoginIdPlaceholder()}
+                  required
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+              </div>
             </div>
 
             {/* Password */}
-            <div className="mb-6">
-              <Input
-                label="Password"
-                type="password"
-                placeholder="Enter your password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-                icon={
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                }
-              />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                  <Lock size={20} />
+                </div>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="Enter your password"
+                  required
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+              </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="flex items-center gap-2 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+                <AlertCircle size={20} className="text-red-600" />
+                <p className="text-sm text-red-700 font-medium">{error}</p>
+              </div>
+            )}
+
             {/* Submit Button */}
-            <Button
+            <button
               type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full"
+              disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign In
-            </Button>
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
           </form>
 
-          <p className="text-center text-purple-300 text-sm mt-6">
-            Demo credentials: Any ID/Password works
-          </p>
+          <div className="mt-6 text-center text-sm text-gray-400">
+            © 2024 Academic ERP
+          </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-purple-300 text-sm mt-6">
-          © 2026 Nirman Hackathon
-        </p>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default LoginPage
+export default LoginPage;

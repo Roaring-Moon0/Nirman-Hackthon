@@ -57,21 +57,45 @@ export const uploadAssignment = async (req, res) => {
 export const getClassAssignments = async (req, res) => {
   try {
     const { classId } = req.query;
+    const role = req.user.role; // Assuming role is in JWT
 
-    if (!classId) {
-      return res.status(400).json({ message: "classId is required" });
+    // For teachers: classId is optional. If not provided, return all their assignments.
+    // For students: classId is required to prevent excessive data.
+    if (!classId && role === "student") {
+      return res
+        .status(400)
+        .json({ message: "classId is required for students" });
     }
 
-    const assignments = await Assignment.find({
-      classId,
+    const query = {
       isActive: true,
-    })
+    };
+
+    // If teacher and no classId: find by teacherId
+    if (role === "teacher") {
+      const teacher = await Teacher.findOne({ userId: req.user.userId });
+      if (!teacher) {
+        return res.status(404).json({ message: "Teacher not found" });
+      }
+      query.teacherId = teacher._id;
+
+      // Optional classId filter
+      if (classId) {
+        query.classId = classId;
+      }
+    } else {
+      // Student must provide classId
+      query.classId = classId;
+    }
+
+    const assignments = await Assignment.find(query)
       .populate("teacherId", "name employeeId")
       .populate("subjectId", "subjectName subjectCode")
+      .populate("classId", "classCode year section")
       .sort({ dueDate: -1 });
 
     res.json({
-      classId,
+      classId: classId || "all",
       assignmentCount: assignments.length,
       assignments,
     });
@@ -154,7 +178,10 @@ export const getAssignmentSubmissions = async (req, res) => {
 
     // Verify assignment belongs to teacher
     const assignment = await Assignment.findById(assignmentId);
-    if (!assignment || assignment.teacherId.toString() !== teacher._id.toString()) {
+    if (
+      !assignment ||
+      assignment.teacherId.toString() !== teacher._id.toString()
+    ) {
       return res
         .status(403)
         .json({ message: "Unauthorized to view these submissions" });
@@ -224,7 +251,7 @@ export const getStudentSubmissions = async (req, res) => {
     const studentId = req.user.userId;
 
     const student = await Student.findOne({ userId: studentId }).populate(
-      "classId"
+      "classId",
     );
     if (!student) {
       return res.status(404).json({ message: "Student not found" });

@@ -26,7 +26,16 @@ const classSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  },
 );
+
+// Virtual for formatted class name
+classSchema.virtual("name").get(function () {
+  return `${this.course} ${this.department} - ${this.year} Year - Sec ${this.section}`;
+});
 
 export const Class = mongoose.model("Class", classSchema);

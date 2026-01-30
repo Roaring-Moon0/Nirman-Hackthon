@@ -1,128 +1,125 @@
-import React, { useState } from 'react'
-import AdminCard from '../components/AdminCard'
-import AdminForm from '../components/AdminForm'
-import axiosInstance from '../api/axios'
-import { API_ENDPOINTS, FORM_FIELDS, ADMIN_KEY_STORAGE } from '../utils/constants'
+import React, { useState, useEffect } from "react";
+import {
+  Users,
+  GraduationCap,
+  BookOpen,
+  AlertTriangle,
+  ArrowUpRight,
+  Activity,
+} from "lucide-react";
+import axiosInstance from "../api/axios";
+
+const StatCard = ({ title, value, icon: Icon, color, trend }) => (
+  <div className="stat-card">
+    <div className="stat-info">
+      <p>{title}</p>
+      <h3>{value}</h3>
+      {trend && (
+        <p className="trend">
+          <ArrowUpRight size={14} />
+          {trend}
+        </p>
+      )}
+    </div>
+    <div className={`stat-icon-wrapper ${color.replace("bg-", "bg-")}`}>
+      <Icon size={28} />
+    </div>
+  </div>
+);
 
 const AdminDashboard = () => {
-  const [messages, setMessages] = useState({})
-  const [loading, setLoading] = useState({})
+  const [stats, setStats] = useState({
+    studentCount: 0,
+    teacherCount: 0,
+    classCount: 0,
+    subjectCount: 0,
+  });
+  const [loading, setLoading] = useState(true);
 
-  const showMessage = (section, type, text) => {
-    setMessages({ ...messages, [section]: { type, text } })
-    setTimeout(() => {
-      setMessages((prev) => {
-        const newMessages = { ...prev }
-        delete newMessages[section]
-        return newMessages
-      })
-    }, 5000)
-  }
+  useEffect(() => {
+    fetchStats();
+  }, []);
 
-  const handleSubmit = async (section, endpoint, data) => {
-    setLoading({ ...loading, [section]: true })
+  const fetchStats = async () => {
     try {
-      const response = await axiosInstance.post(endpoint, data)
-      showMessage(section, 'success', response.data.message || 'Successfully added!')
+      const response = await axiosInstance.get("/admin/stats");
+      setStats(response.data);
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Failed to add. Please try again.'
-      showMessage(section, 'error', errorMsg)
+      console.error("Failed to fetch stats:", error);
     } finally {
-      setLoading({ ...loading, [section]: false })
+      setLoading(false);
     }
-  }
+  };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem(ADMIN_KEY_STORAGE)
-    window.location.reload()
-  }
+  if (loading)
+    return (
+      <div className="loading-container">
+        <div className="spinner">Loading...</div>
+      </div>
+    );
 
   return (
-    <div>
+    <div className="dashboard-container">
       {/* Header */}
-      <div className="admin-header">
-        <div className="admin-header-content">
-          <div>
-            <h1>Admin Panel</h1>
-            <p>Nirman Education Management System</p>
-          </div>
-          <button className="btn btn-danger" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
+      <div className="dashboard-header">
+        <h1 className="dashboard-title">Dashboard Overview</h1>
+        <p className="dashboard-subtitle">
+          Welcome back, Admin. Here's what's happening today.
+        </p>
       </div>
 
-      {/* Main Content */}
-      <div className="container">
-        <div className="info-box">
-          <strong>Default Credentials:</strong>
-          All students and teachers are created with the default password: <code>college@123</code>
-        </div>
+      {/* Stats Grid */}
+      <div className="stats-grid">
+        <StatCard
+          title="Total Students"
+          value={stats.studentCount}
+          icon={GraduationCap}
+          color="bg-blue"
+          trend="+12% this month"
+        />
+        <StatCard
+          title="Active Teachers"
+          value={stats.teacherCount}
+          icon={Users}
+          color="bg-emerald"
+          trend="Stable"
+        />
+        <StatCard
+          title="Total Classes"
+          value={stats.classCount}
+          icon={BookOpen}
+          color="bg-purple"
+          trend="All active"
+        />
+        <StatCard
+          title="Total Subjects"
+          value={stats.subjectCount}
+          icon={Activity}
+          color="bg-amber"
+          trend="Curriculum updated"
+        />
+      </div>
 
-        <div className="admin-grid">
-          {/* Add Class */}
-          <AdminCard title="➕ Add Class">
-            {messages.class && (
-              <div className={`message message-${messages.class.type}`}>
-                {messages.class.text}
-              </div>
-            )}
-            <AdminForm
-              fields={FORM_FIELDS.CLASS}
-              onSubmit={(data) => handleSubmit('class', API_ENDPOINTS.ADD_CLASS, data)}
-              submitText="Add Class"
-              loading={loading.class}
-            />
-          </AdminCard>
-
-          {/* Add Subject */}
-          <AdminCard title="📚 Add Subject">
-            {messages.subject && (
-              <div className={`message message-${messages.subject.type}`}>
-                {messages.subject.text}
-              </div>
-            )}
-            <AdminForm
-              fields={FORM_FIELDS.SUBJECT}
-              onSubmit={(data) => handleSubmit('subject', API_ENDPOINTS.ADD_SUBJECT, data)}
-              submitText="Add Subject"
-              loading={loading.subject}
-            />
-          </AdminCard>
-
-          {/* Add Student */}
-          <AdminCard title="🎓 Add Student">
-            {messages.student && (
-              <div className={`message message-${messages.student.type}`}>
-                {messages.student.text}
-              </div>
-            )}
-            <AdminForm
-              fields={FORM_FIELDS.STUDENT}
-              onSubmit={(data) => handleSubmit('student', API_ENDPOINTS.ADD_STUDENT, data)}
-              submitText="Add Student"
-              loading={loading.student}
-            />
-          </AdminCard>
-
-          {/* Add Teacher */}
-          <AdminCard title="👨‍🏫 Add Teacher">
-            {messages.teacher && (
-              <div className={`message message-${messages.teacher.type}`}>
-                {messages.teacher.text}
-              </div>
-            )}
-            <AdminForm
-              fields={FORM_FIELDS.TEACHER}
-              onSubmit={(data) => handleSubmit('teacher', API_ENDPOINTS.ADD_TEACHER, data)}
-              submitText="Add Teacher"
-              loading={loading.teacher}
-            />
-          </AdminCard>
+      {/* Quick Actions Section */}
+      <div className="actions-section">
+        <h3 className="section-title">Quick Actions</h3>
+        <div className="actions-grid">
+          <a href="/students" className="action-btn">
+            <GraduationCap size={24} className="text-blue" />
+            <span>Add Student</span>
+          </a>
+          <a href="/teachers" className="action-btn">
+            <Users size={24} className="text-emerald" />
+            <span>Add Teacher</span>
+          </a>
+          <a href="/classes" className="action-btn">
+            <BookOpen size={24} className="text-purple" />
+            <span>Create Class</span>
+          </a>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default AdminDashboard
+export default AdminDashboard;

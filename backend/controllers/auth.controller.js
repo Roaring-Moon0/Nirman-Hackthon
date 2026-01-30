@@ -25,7 +25,7 @@ export const login = async (req, res) => {
     let profile = null;
 
     if (user.role === "student") {
-      profile = await Student.findOne({ userId: user._id });
+      profile = await Student.findOne({ userId: user._id }).populate("classId");
     }
 
     if (user.role === "teacher") {
@@ -35,7 +35,7 @@ export const login = async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "1d" },
     );
 
     res.json({

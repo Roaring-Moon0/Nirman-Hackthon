@@ -4,6 +4,7 @@ export const API_BASE_URL =
 
 // SessionStorage key for admin key
 export const ADMIN_KEY_STORAGE = "adminKey";
+export const ADMIN_AUTH_SESSION_KEY = "admin-auth";
 
 // API Endpoints
 export const API_ENDPOINTS = {

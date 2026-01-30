@@ -20,8 +20,26 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Settings Module Fields
+    email: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows null/undefined to not conflict
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otp: {
+      type: String,
+      select: false, // Do not return by default
+    },
+    otpExpires: {
+      type: Date,
+      select: false,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const User = mongoose.model("User", userSchema);

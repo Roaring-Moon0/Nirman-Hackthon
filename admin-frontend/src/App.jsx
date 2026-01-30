@@ -1,32 +1,80 @@
-import React, { useState, useEffect } from 'react'
-import AdminGate from './components/AdminGate'
-import AdminDashboard from './pages/AdminDashboard'
-import { ADMIN_KEY_STORAGE } from './utils/constants'
+import React from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
+import AdminGate from "./components/AdminGate";
+import AdminLayout from "./components/AdminLayout";
+import AdminDashboard from "./pages/AdminDashboard";
+import StudentsPage from "./pages/Students";
+import TeachersPage from "./pages/Teachers";
+import ClassesPage from "./pages/Classes";
+import AnalyticsPage from "./pages/Analytics";
+import { AdminAuthProvider, useAdminAuth } from "./context/AdminAuthContext";
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+// Protected Route Component
+const ProtectedRoute = () => {
+  const { admin, loading } = useAdminAuth();
 
-  useEffect(() => {
-    // Check if admin key exists in sessionStorage
-    const adminKey = sessionStorage.getItem(ADMIN_KEY_STORAGE)
-    if (adminKey) {
-      setIsAuthenticated(true)
-    }
-  }, [])
-
-  const handleAuthenticated = () => {
-    setIsAuthenticated(true)
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading...
+      </div>
+    ); // Or a spinner
   }
 
+  if (!admin) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Outlet />;
+};
+
+const PublicRoute = () => {
+  const { admin, loading } = useAdminAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  if (admin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
+function App() {
   return (
-    <>
-      {isAuthenticated ? (
-        <AdminDashboard />
-      ) : (
-        <AdminGate onAuthenticated={handleAuthenticated} />
-      )}
-    </>
-  )
+    <AdminAuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Routes */}
+          <Route element={<PublicRoute />}>
+            <Route path="/login" element={<AdminGate />} />
+          </Route>
+
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="students" element={<StudentsPage />} />
+              <Route path="teachers" element={<TeachersPage />} />
+              <Route path="classes" element={<ClassesPage />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+            </Route>
+          </Route>
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AdminAuthProvider>
+  );
 }
 
-export default App
+export default App;

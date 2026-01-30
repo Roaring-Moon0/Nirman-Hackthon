@@ -1,5 +1,9 @@
 import axios from "axios";
-import { API_BASE_URL, ADMIN_KEY_STORAGE } from "../utils/constants";
+import {
+  API_BASE_URL,
+  ADMIN_KEY_STORAGE,
+  ADMIN_AUTH_SESSION_KEY,
+} from "../utils/constants";
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -31,6 +35,7 @@ axiosInstance.interceptors.response.use(
     if (error.response?.status === 403) {
       // Invalid admin key - clear storage
       sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+      sessionStorage.removeItem(ADMIN_AUTH_SESSION_KEY);
       window.location.reload();
     }
     return Promise.reject(error);

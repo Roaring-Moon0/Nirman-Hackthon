@@ -1,9 +1,5 @@
 import { Marks } from "../models/Marks.js";
 
-/**
- * Calculate marks trend for a student in a subject
- * Returns: "improving" | "declining" | "stable" | "insufficient_data"
- */
 export const calculateMarksTrend = async (studentId, subjectId) => {
   try {
     const marks = await Marks.find({
@@ -22,12 +18,14 @@ export const calculateMarksTrend = async (studentId, subjectId) => {
       return "insufficient_data";
     }
 
-    const avgRecent = recent.reduce((sum, m) => sum + m.percentage, 0) / recent.length;
+    const avgRecent =
+      recent.reduce((sum, m) => sum + m.percentage, 0) / recent.length;
     const older = marks.slice(0, Math.max(1, marks.length - 3));
-    const avgOlder = older.reduce((sum, m) => sum + m.percentage, 0) / older.length;
+    const avgOlder =
+      older.reduce((sum, m) => sum + m.percentage, 0) / older.length;
 
     const difference = avgRecent - avgOlder;
-    const threshold = 5; // 5% threshold for change
+    const threshold = 5;
 
     if (difference > threshold) {
       return "improving";
@@ -60,7 +58,9 @@ export const getStudentMarksMetrics = async (studentId, classId) => {
 
     const latestMarks = marks[0];
     const averagePercentage = parseFloat(
-      (marks.reduce((sum, m) => sum + m.percentage, 0) / marks.length).toFixed(2)
+      (marks.reduce((sum, m) => sum + m.percentage, 0) / marks.length).toFixed(
+        2,
+      ),
     );
 
     return {

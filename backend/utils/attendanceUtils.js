@@ -1,4 +1,5 @@
 import { Attendance } from "../models/Attendance.js";
+import { Timetable } from "../models/Timetable.js";
 
 /**
  * Calculate attendance percentage for a student in a subject
@@ -6,27 +7,38 @@ import { Attendance } from "../models/Attendance.js";
 export const calculateAttendancePercentage = async (
   studentId,
   subjectId,
-  classId
+  classId,
 ) => {
   try {
-    const totalRecords = await Attendance.countDocuments({
+    const totalRecords = await Attendance.find({
       studentId,
       subjectId,
       classId,
-    });
+    }).populate("timetableId");
 
-    if (totalRecords === 0) {
+    if (totalRecords.length === 0) {
       return 0;
     }
 
-    const presentCount = await Attendance.countDocuments({
-      studentId,
-      subjectId,
-      classId,
-      isPresent: true,
+    let weightedTotal = 0;
+    let weightedPresent = 0;
+
+    const weights = {
+      Lecture: 1,
+      Lab: 1.25,
+      Practical: 1.5,
+    };
+
+    totalRecords.forEach((record) => {
+      const type = record.timetableId?.classType || "Lecture";
+      const weight = weights[type] || 1;
+      weightedTotal += weight;
+      if (record.isPresent) {
+        weightedPresent += weight;
+      }
     });
 
-    return (presentCount / totalRecords) * 100;
+    return (weightedPresent / weightedTotal) * 100;
   } catch (error) {
     console.error("Error calculating attendance percentage:", error);
     throw error;
@@ -62,26 +74,54 @@ export const calculateConsecutiveAbsenceStreak = async (studentId) => {
  */
 export const getStudentAttendanceMetrics = async (studentId, classId) => {
   try {
-    const totalClasses = await Attendance.countDocuments({
+    const records = await Attendance.find({
       studentId,
       classId,
+    }).populate("timetableId");
+
+    if (records.length === 0) {
+      return {
+        totalClasses: 0,
+        presentCount: 0,
+        absentCount: 0,
+        percentage: 0,
+        weightedPercentage: 0,
+        absenceStreak: 0,
+      };
+    }
+
+    const weights = {
+      Lecture: 1,
+      Lab: 1.25,
+      Practical: 1.5,
+    };
+
+    let weightedTotal = 0;
+    let weightedPresent = 0;
+    let presentCount = 0;
+
+    records.forEach((record) => {
+      const type = record.timetableId?.classType || "Lecture";
+      const weight = weights[type] || 1;
+      weightedTotal += weight;
+      if (record.isPresent) {
+        weightedPresent += weight;
+        presentCount++;
+      }
     });
 
-    const presentCount = await Attendance.countDocuments({
-      studentId,
-      classId,
-      isPresent: true,
-    });
-
+    const totalClasses = records.length;
     const absentCount = totalClasses - presentCount;
-    const percentage = totalClasses > 0 ? (presentCount / totalClasses) * 100 : 0;
+    const normalPercentage = (presentCount / totalClasses) * 100;
+    const weightedPercentage = (weightedPresent / weightedTotal) * 100;
     const absenceStreak = await calculateConsecutiveAbsenceStreak(studentId);
 
     return {
       totalClasses,
       presentCount,
       absentCount,
-      percentage: parseFloat(percentage.toFixed(2)),
+      percentage: parseFloat(normalPercentage.toFixed(2)),
+      weightedPercentage: parseFloat(weightedPercentage.toFixed(2)),
       absenceStreak,
     };
   } catch (error) {
