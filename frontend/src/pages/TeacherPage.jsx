@@ -88,8 +88,90 @@ const TeacherPage = () => {
       })),
     ) || [];
 
+  // State for student modal
+  const [selectedClass, setSelectedClass] = useState(null);
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
+      {/* Student List Modal */}
+      {selectedClass && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  {selectedClass.class.classCode} Students
+                </h3>
+                <p className="text-sm text-purple-600">
+                  {selectedClass.subject.subjectName}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedClass(null)}
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                title="Close"
+              >
+                ✖
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              {selectedClass.students && selectedClass.students.length > 0 ? (
+                <div className="overflow-hidden rounded-xl border border-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Roll No
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Email
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {selectedClass.students.map((student) => (
+                        <tr
+                          key={student._id}
+                          className="hover:bg-purple-50 transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {student.rollNo}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {student.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {student.email || "N/A"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-10 text-gray-500">
+                  <Users className="mx-auto h-12 w-12 text-gray-300 mb-2" />
+                  <p>No students enrolled in this class yet.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setSelectedClass(null)}
+                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-sm p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -144,7 +226,13 @@ const TeacherPage = () => {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {classes?.length > 0 ? (
-              classes.map((c, idx) => <ClassCard key={idx} classData={c} />)
+              classes.map((c, idx) => (
+                <ClassCard
+                  key={idx}
+                  classData={c}
+                  onViewDetails={() => setSelectedClass(c)}
+                />
+              ))
             ) : (
               <p className="text-gray-500 col-span-full italic">
                 No classes assigned yet.
@@ -157,7 +245,7 @@ const TeacherPage = () => {
   );
 };
 
-const ClassCard = ({ classData }) => {
+const ClassCard = ({ classData, onViewDetails }) => {
   const { class: classInfo, subject, totalStudents, riskSummary } = classData;
   const highRisk = riskSummary?.highRisk || 0;
 
@@ -228,8 +316,11 @@ const ClassCard = ({ classData }) => {
       </div>
 
       <div className="bg-gray-50 px-6 py-3 border-t border-gray-100 flex justify-between items-center">
-        <button className="text-purple-600 text-sm font-semibold hover:text-purple-700">
-          View Details
+        <button
+          onClick={onViewDetails}
+          className="text-purple-600 text-sm font-semibold hover:text-purple-700 transition-colors"
+        >
+          View Students
         </button>
         <button className="text-gray-400 hover:text-gray-600">
           <TrendingUp size={18} />

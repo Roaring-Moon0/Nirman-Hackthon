@@ -36,7 +36,7 @@ axiosInstance.interceptors.response.use(
       // Invalid admin key - clear storage
       sessionStorage.removeItem(ADMIN_KEY_STORAGE);
       sessionStorage.removeItem(ADMIN_AUTH_SESSION_KEY);
-      window.location.reload();
+      // window.location.reload(); // CAUSES LOOP ON LOGIN FAILURE
     }
     return Promise.reject(error);
   },

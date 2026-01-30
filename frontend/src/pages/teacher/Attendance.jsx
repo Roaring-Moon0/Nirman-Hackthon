@@ -1,302 +1,303 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../utils/constants";
+import { useAuth } from "../../context/AuthContext";
 import {
   Calendar,
-  Clock,
-  Users,
+  Save,
   CheckCircle,
   XCircle,
-  Save,
-  Loader2,
+  Users,
+  AlertCircle,
+  Search,
 } from "lucide-react";
+import { toast } from "react-toastify";
 
 const TeacherAttendance = () => {
   const { token } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [dates, setDates] = useState({
-    today: new Date().toISOString().split("T")[0],
-  });
-  const [timetable, setTimetable] = useState([]);
-  const [selectedClass, setSelectedClass] = useState(null);
+  const [classes, setClasses] = useState([]);
+  const [selectedClass, setSelectedClass] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [students, setStudents] = useState([]);
-  const [attendanceState, setAttendanceState] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // 1. Fetch Today's Timetable
+  // 1. Fetch Teacher's Classes
   useEffect(() => {
-    const fetchTimetable = async () => {
+    const fetchClasses = async () => {
       try {
-        const res = await axios.get(
-          `${API_BASE_URL}/api/attendance/today-timetable`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        setTimetable(res.data.classes || []);
+        const res = await axios.get(`${API_BASE_URL}/api/teacher/classes`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        // Adapt response structure depending on controller
+        // Expecting { classes: [...] } where class object has classId or _id
+        const classList = res.data.classes || [];
+        // Flatten structure if needed (based on previous edits): "classes" array of { class, subject, students }
+        const formatted = classList.map((item) => ({
+          id: item.class?._id || item._id, // Handle populated structure
+          name: item.class?.classCode || item.classCode,
+          section: item.class?.section || item.section,
+          subject: item.subject?.subjectName,
+        }));
+        setClasses(formatted);
       } catch (err) {
-        console.error("Failed to fetch timetable", err);
-      } finally {
-        setLoading(false);
+        toast.error("Failed to load assigned classes");
       }
     };
-    if (token) fetchTimetable();
+    if (token) fetchClasses();
   }, [token]);
 
-  // 2. Fetch Students when Class Selected
-  useEffect(() => {
-    const fetchStudents = async () => {
-      if (!selectedClass) return;
-      try {
-        setLoading(true);
-        // We need an endpoint to get students of a class.
-        // We can reuse /api/teacher/high-risk-students?classId=... or a new dedicated one.
-        // Or generic /api/student/list?classId=...
-        // Let's assume we use the endpoint that gives us students or we add one.
-        // Checking routes... class-report gives students.
-        const res = await axios.get(
-          `${API_BASE_URL}/api/attendance/class-report`,
-          {
-            params: {
-              classId: selectedClass.classId._id,
-              subjectId: selectedClass.subjectId._id,
-            },
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
+  // 2. Fetch Attendance for Selected Class & Date
+  const fetchAttendance = async () => {
+    if (!selectedClass || !date) return;
 
-        setStudents(res.data.attendanceReport || []); // Using report data which contains student info
-
-        // Initialize attendance to PRESENT by default
-        const initial = {};
-        res.data.attendanceReport.forEach((s) => (initial[s.studentId] = true));
-        setAttendanceState(initial);
-      } catch (err) {
-        console.error("Failed to fetch students", err);
-        setMessage({ type: "error", text: "Failed to load student list" });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (selectedClass) fetchStudents();
-  }, [selectedClass, token]);
-
-  const toggleAttendance = (studentId) => {
-    setAttendanceState((prev) => ({
-      ...prev,
-      [studentId]: !prev[studentId],
-    }));
-  };
-
-  const handleSubmit = async () => {
     try {
-      setSubmitting(true);
-      const attendanceRecords = Object.entries(attendanceState).map(
-        ([studentId, isPresent]) => ({
-          studentId,
-          isPresent,
-        }),
+      setLoadingStudents(true);
+      const res = await axios.get(
+        `${API_BASE_URL}/api/attendance/teacher/${selectedClass}?date=${date}`,
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
-      await axios.post(
-        `${API_BASE_URL}/api/attendance/take`,
-        {
-          timetableId: selectedClass._id,
-          classId: selectedClass.classId._id,
-          subjectId: selectedClass.subjectId._id,
-          date: dates.today,
-          attendanceRecords,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      // Initialize status: use existing or default to 'present' if not marked
+      const fetchedStudents = res.data.students.map((s) => ({
+        ...s,
+        status: s.status || "present", // Default present for easier marking
+      }));
 
-      setMessage({
-        type: "success",
-        text: "Attendance submitted successfully!",
-      });
-      setSelectedClass(null); // Reset
-      setTimeout(() => setMessage(null), 3000);
+      setStudents(fetchedStudents);
     } catch (err) {
-      setMessage({
-        type: "error",
-        text: err.response?.data?.message || "Failed to submit attendance",
-      });
+      console.error(err);
+      toast.error("Failed to load student list");
     } finally {
-      setSubmitting(false);
+      setLoadingStudents(false);
     }
   };
 
-  if (loading && !selectedClass)
-    return <div className="p-8 text-center">Loading timetable...</div>;
+  useEffect(() => {
+    if (selectedClass && date) {
+      fetchAttendance();
+    }
+  }, [selectedClass, date]);
 
-  // Lock check: Attendance can only be edited for today
-  const now = new Date();
-  const isToday = dates.today === now.toISOString().split("T")[0];
-  const isLocked = !isToday; // Locked if viewing past dates
+  // 3. Toggle Status
+  const toggleStatus = (studentId) => {
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.studentId === studentId
+          ? { ...s, status: s.status === "present" ? "absent" : "present" }
+          : s,
+      ),
+    );
+  };
+
+  // 4. Submit Attendance
+  const handleSubmit = async () => {
+    try {
+      setSaving(true);
+      const payload = {
+        date,
+        records: students.map((s) => ({
+          studentId: s.studentId,
+          status: s.status,
+        })),
+      };
+
+      await axios.post(
+        `${API_BASE_URL}/api/attendance/teacher/${selectedClass}`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      toast.success("Attendance saved successfully! 🎓");
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Failed to save attendance");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Stats
+  const presentCount = students.filter((s) => s.status === "present").length;
+  const absentCount = students.length - presentCount;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
-        <div className="flex items-center gap-2 text-gray-500 bg-white px-4 py-2 rounded-xl border border-gray-100">
-          <Calendar size={18} />
-          <span>{new Date().toDateString()}</span>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header & Controls */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Calendar className="text-purple-600" /> Mark Attendance
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Select class and date to manage attendance.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Class Selector */}
+          <div className="relative">
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="pl-4 pr-10 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 text-gray-700 font-medium"
+            >
+              <option value="">Select Class</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.section ? `(Sec ${c.section})` : ""}{" "}
+                  {c.subject ? `- ${c.subject}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Picker */}
+          <input
+            type="date"
+            value={date}
+            max={new Date().toISOString().split("T")[0]} // No future attendance
+            onChange={(e) => setDate(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 text-gray-700 font-medium"
+          />
         </div>
       </div>
 
-      {message && (
-        <div
-          className={`p-4 rounded-xl ${message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* View 1: Timetable List */}
-      {!selectedClass ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {timetable.length > 0 ? (
-            timetable.map((slot) => (
-              <div
-                key={slot._id}
-                className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
-                    <Clock size={24} />
-                  </div>
-                  <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">
-                    {slot.startTime} - {slot.endTime}
+      {/* Main Content Area */}
+      {selectedClass ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Summary Panel */}
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-gray-900 mb-4">Summary</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-3 bg-green-50 rounded-xl text-green-700">
+                  <span className="flex items-center gap-2 font-medium">
+                    <CheckCircle size={18} /> Present
                   </span>
+                  <span className="font-bold text-xl">{presentCount}</span>
                 </div>
-                <h3 className="font-bold text-lg text-gray-900">
-                  {slot.subjectId.subjectName}
-                </h3>
-                <p className="text-gray-500 text-sm mb-6">
-                  Class {slot.classId.classCode} • {slot.classId.section}
-                </p>
-                <button
-                  onClick={() => setSelectedClass(slot)}
-                  className="w-full py-2 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors"
-                >
-                  Take Attendance
-                </button>
+                <div className="flex justify-between items-center p-3 bg-red-50 rounded-xl text-red-700">
+                  <span className="flex items-center gap-2 font-medium">
+                    <XCircle size={18} /> Absent
+                  </span>
+                  <span className="font-bold text-xl">{absentCount}</span>
+                </div>
+                <div className="pt-4 border-t border-gray-100 flex justify-between text-sm text-gray-600">
+                  <span>Total Students</span>
+                  <span className="font-bold">{students.length}</span>
+                </div>
               </div>
-            ))
-          ) : (
-            <div className="col-span-full text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-              <p className="text-gray-500">No classes scheduled for today.</p>
+
+              <button
+                onClick={handleSubmit}
+                disabled={saving || loadingStudents || students.length === 0}
+                className={`mt-6 w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-white transition-all
+                            ${saving ? "bg-purple-400 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200 hover:shadow-purple-300"}
+                        `}
+              >
+                {saving ? (
+                  <span className="animate-spin">⏳</span>
+                ) : (
+                  <Save size={20} />
+                )}
+                {saving ? "Saving..." : "Submit Attendance"}
+              </button>
+              {!students.length && !loadingStudents && (
+                <p className="text-xs text-center text-red-400 mt-2">
+                  No students found in this class.
+                </p>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Right: Student List */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                  <Users size={18} className="text-gray-500" /> Student List
+                </h3>
+                <span className="text-xs text-gray-500 italic">
+                  Tap status to toggle
+                </span>
+              </div>
+
+              {loadingStudents ? (
+                <div className="p-10 text-center text-gray-400">
+                  Loading student list...
+                </div>
+              ) : students.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs text-gray-500 uppercase">
+                        <th className="p-4 font-medium">Roll No</th>
+                        <th className="p-4 font-medium">Name</th>
+                        <th className="p-4 font-medium text-center">Status</th>
+                        <th className="p-4 font-medium text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {students.map((student) => (
+                        <tr
+                          key={student.studentId}
+                          className={`hover:bg-gray-50 transition-colors ${student.status === "absent" ? "bg-red-50/30" : ""}`}
+                        >
+                          <td className="p-4 font-medium text-gray-900">
+                            {student.rollNo}
+                          </td>
+                          <td className="p-4 text-gray-700">{student.name}</td>
+                          <td className="p-4 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider cursor-pointer select-none transition-all
+                                                        ${
+                                                          student.status ===
+                                                          "present"
+                                                            ? "bg-green-100 text-green-700 border border-green-200"
+                                                            : "bg-red-100 text-red-700 border border-red-200"
+                                                        }
+                                                    `}
+                              onClick={() => toggleStatus(student.studentId)}
+                            >
+                              {student.status === "present" ? (
+                                <CheckCircle size={12} />
+                              ) : (
+                                <XCircle size={12} />
+                              )}
+                              {student.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => toggleStatus(student.studentId)}
+                              className="text-xs font-medium text-purple-600 hover:text-purple-800 underline"
+                            >
+                              Change
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-10 text-center text-gray-400">
+                  <AlertCircle className="mx-auto mb-2 opacity-50" size={32} />
+                  <p>No students found for this class.</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
-        /* View 2: Student List */
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-            <div>
-              <h2 className="font-bold text-xl text-gray-900">
-                {selectedClass.subjectId.subjectName}
-              </h2>
-              <p className="text-gray-500">
-                Marking attendance for {selectedClass.classId.classCode}
-              </p>
-            </div>
-            <button
-              onClick={() => setSelectedClass(null)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              Cancel
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">Roll No</th>
-                  <th className="px-6 py-4">Student Name</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {students.map((student) => (
-                  <tr
-                    key={student.studentId}
-                    className={
-                      !attendanceState[student.studentId] ? "bg-red-50/30" : ""
-                    }
-                  >
-                    <td className="px-6 py-4 font-mono text-sm text-gray-600">
-                      {student.rollNo}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-gray-900">
-                      {student.name}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
-                          attendanceState[student.studentId]
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {attendanceState[student.studentId] ? (
-                          <CheckCircle size={12} />
-                        ) : (
-                          <XCircle size={12} />
-                        )}
-                        {attendanceState[student.studentId]
-                          ? "Present"
-                          : "Absent"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => toggleAttendance(student.studentId)}
-                        disabled={isLocked}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                          attendanceState[student.studentId]
-                            ? "bg-red-100 text-red-600 hover:bg-red-200"
-                            : "bg-green-100 text-green-600 hover:bg-green-200"
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        Mark{" "}
-                        {attendanceState[student.studentId]
-                          ? "Absent"
-                          : "Present"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-4">
-            <span className="self-center text-sm text-gray-500">
-              Present: {Object.values(attendanceState).filter(Boolean).length} /{" "}
-              {students.length}
-            </span>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || isLocked}
-              className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
-              title={isLocked ? "Attendance locked for past dates" : ""}
-            >
-              {submitting ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <Save size={20} />
-              )}
-              {isLocked ? "Locked" : "Submit Attendance"}
-            </button>
-          </div>
+        <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+          <Search className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+          <h3 className="text-lg font-bold text-gray-700">No Class Selected</h3>
+          <p className="text-gray-500">
+            Please select a class from the dropdown above to manage attendance.
+          </p>
         </div>
       )}
     </div>

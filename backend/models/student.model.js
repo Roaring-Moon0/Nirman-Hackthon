@@ -25,8 +25,14 @@ const studentSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    assignedTeachers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Teacher",
+      },
+    ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const Student = mongoose.model("Student", studentSchema);

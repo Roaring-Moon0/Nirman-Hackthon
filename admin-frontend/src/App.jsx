@@ -13,7 +13,10 @@ import StudentsPage from "./pages/Students";
 import TeachersPage from "./pages/Teachers";
 import ClassesPage from "./pages/Classes";
 import AnalyticsPage from "./pages/Analytics";
+import AssignmentsPage from "./pages/Assignments";
 import { AdminAuthProvider, useAdminAuth } from "./context/AdminAuthContext";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 // Protected Route Component
 const ProtectedRoute = () => {
@@ -51,6 +54,7 @@ const PublicRoute = () => {
 function App() {
   return (
     <AdminAuthProvider>
+      <ToastContainer position="top-right" autoClose={3000} />
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
@@ -65,6 +69,7 @@ function App() {
               <Route path="students" element={<StudentsPage />} />
               <Route path="teachers" element={<TeachersPage />} />
               <Route path="classes" element={<ClassesPage />} />
+              <Route path="assignments" element={<AssignmentsPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
             </Route>
           </Route>

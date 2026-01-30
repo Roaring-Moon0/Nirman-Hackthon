@@ -25,6 +25,18 @@ const classSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    teachers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Teacher",
+      },
+    ],
+    students: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Student",
+      },
+    ],
   },
   {
     timestamps: true,

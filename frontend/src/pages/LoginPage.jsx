@@ -1,68 +1,86 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
-import { API_BASE_URL, ENDPOINTS } from '../utils/constants';
-import { GraduationCap, Users, Lock, LogIn, AlertCircle } from 'lucide-react';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL, ENDPOINTS } from "../utils/constants";
+import { GraduationCap, Users, Lock, LogIn, AlertCircle } from "lucide-react";
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  
+
   const [formData, setFormData] = useState({
-    role: 'student',
-    loginId: '',
-    password: ''
+    role: "student",
+    loginId: "",
+    password: "",
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (error) setError('');
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
+      console.log("🔵 Attempting Login:", {
+        url: `${API_BASE_URL}${ENDPOINTS.LOGIN}`,
+        role: formData.role,
+        loginId: formData.loginId,
+        password: "***",
+      });
+
       const response = await axios.post(`${API_BASE_URL}${ENDPOINTS.LOGIN}`, {
         loginId: formData.loginId,
-        password: formData.password
+        password: formData.password,
       });
 
       const { token, role, ...profile } = response.data;
-      
+
       // Flatten profile for context
       const userForContext = {
         role,
         name: profile.name,
         // If classId is populated object, use name, else use id or fallback
-        className: profile.classId?.name || profile.classId || 'Class N/A', 
-        ...profile 
+        className: profile.classId?.name || profile.classId || "Class N/A",
+        ...profile,
       };
-      
+
       // Save to AuthContext (which saves to localStorage)
       login(userForContext, token);
 
       // Navigate based on role
-      if (role === 'teacher') {
-        navigate('/teacher');
+      if (role === "teacher") {
+        navigate("/teacher");
       } else {
-        navigate('/student');
+        navigate("/student");
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      console.error("🔴 Login Error:", err.response?.data || err.message);
+      setError(
+        err.response?.data?.message ||
+          "Login failed. Please check your credentials.",
+      );
       setLoading(false);
     }
   };
 
-  const getRoleIcon = () => formData.role === 'student' ? <GraduationCap size={20} /> : <Users size={20} />;
-  const getLoginIdLabel = () => formData.role === 'student' ? 'Roll Number' : 'Employee ID';
-  const getLoginIdPlaceholder = () => formData.role === 'student' ? 'e.g.S001' : 'e.g. T001';
+  const getRoleIcon = () =>
+    formData.role === "student" ? (
+      <GraduationCap size={20} />
+    ) : (
+      <Users size={20} />
+    );
+  const getLoginIdLabel = () =>
+    formData.role === "student" ? "Roll Number" : "Employee ID";
+  const getLoginIdPlaceholder = () =>
+    formData.role === "student" ? "e.g.S001" : "e.g. T001";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 p-4">
@@ -152,7 +170,7 @@ const LoginPage = () => {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? "Logging in..." : "Login"}
             </button>
           </form>
 

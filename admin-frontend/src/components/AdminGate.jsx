@@ -16,26 +16,24 @@ const AdminGate = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("[AdminGate] Form submitted. Key:", keyInput);
+
     setError("");
     setLoading(true);
 
     try {
-      // Validate by calling ping endpoint
-      // We need to pass the key manually in headers for this request since it's not in storage yet (or we put it there temporarily?)
-      // The previous logic put it in storage *before* the call. The context `loginAdmin` puts it in storage.
-      // But if we fail, we want to remove it.
-      // Better: axiosInstance interceptor reads from storage. So we MUST store it temporarily or pass explicitly.
-      // Let's pass explicitly to avoid race/storage pollution.
-
+      console.log("[AdminGate] Pinging API to validate key...");
       await axiosInstance.get(API_ENDPOINTS.ADMIN_PING, {
         headers: { "x-admin-key": keyInput },
       });
+      console.log("[AdminGate] Ping successful.");
 
       // If successful:
       loginAdmin(keyInput);
+      console.log("[AdminGate] loginAdmin called. Navigating to root...");
       navigate("/");
     } catch (err) {
-      console.error("Login failed:", err);
+      console.error("[AdminGate] Login failed:", err);
       setError("Invalid admin key. Access denied.");
     } finally {
       setLoading(false);

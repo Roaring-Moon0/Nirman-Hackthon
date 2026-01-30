@@ -10,6 +10,7 @@ import {
   BarChart2,
   Settings,
   LogOut,
+  Link,
 } from "lucide-react";
 import { useAdminAuth } from "../context/AdminAuthContext";
 
@@ -19,67 +20,133 @@ const Sidebar = () => {
   const handleLogout = () => {
     if (confirm("Are you sure you want to logout?")) {
       logoutAdmin();
-      // Navigation handled by App state change
     }
   };
 
   const navItems = [
-    { name: "Dashboard", path: "/", icon: <LayoutDashboard size={20} /> },
-    { name: "Students", path: "/students", icon: <GraduationCap size={20} /> },
-    { name: "Teachers", path: "/teachers", icon: <Users size={20} /> },
-    { name: "Classes", path: "/classes", icon: <BookOpen size={20} /> },
-    { name: "Timetable", path: "/timetable", icon: <Calendar size={20} /> },
-    {
-      name: "Attendance",
-      path: "/attendance",
-      icon: <ClipboardCheck size={20} />,
-    },
-    { name: "Analytics", path: "/analytics", icon: <BarChart2 size={20} /> },
-    { name: "Settings", path: "/settings", icon: <Settings size={20} /> },
+    { name: "Dashboard", path: "/", icon: LayoutDashboard },
+    { name: "Students", path: "/students", icon: GraduationCap },
+    { name: "Teachers", path: "/teachers", icon: Users },
+    { name: "Classes", path: "/classes", icon: BookOpen },
+    { name: "Assignments", path: "/assignments", icon: Link },
+    { name: "Timetable", path: "/timetable", icon: Calendar },
+    { name: "Attendance", path: "/attendance", icon: ClipboardCheck },
+    { name: "Analytics", path: "/analytics", icon: BarChart2 },
+    { name: "Settings", path: "/settings", icon: Settings },
   ];
 
   return (
-    <div className="sidebar">
-      <div className="sidebar-header">
-        <h2 className="sidebar-title">Nirman Admin</h2>
+    <aside
+      style={{
+        width: "256px",
+        minWidth: "256px",
+        height: "100vh",
+        backgroundColor: "#0f172a",
+        color: "white",
+        display: "flex",
+        flexDirection: "column",
+        borderRight: "1px solid #1e293b",
+        position: "sticky",
+        top: 0,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: "24px",
+          borderBottom: "1px solid #1e293b",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: "20px",
+            fontWeight: "700",
+            color: "white",
+            margin: 0,
+          }}
+        >
+          Nirman Admin
+        </h2>
         <p
-          style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: "0.25rem" }}
+          style={{
+            fontSize: "11px",
+            color: "#94a3b8",
+            marginTop: "4px",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
         >
           Control Center
         </p>
       </div>
 
-      <nav style={{ flex: 1, overflowY: "auto", padding: "1rem 0" }}>
-        <ul className="nav-list">
-          {navItems.map((item) => (
-            <li key={item.path}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  `nav-item ${isActive ? "active" : ""}`
-                }
-              >
-                {item.icon}
-                <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>
-                  {item.name}
-                </span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+      {/* Navigation */}
+      <nav
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "16px 0",
+        }}
+      >
+        {navItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            style={({ isActive }) => ({
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: "12px 24px",
+              color: isActive ? "white" : "#94a3b8",
+              backgroundColor: isActive ? "#2563eb" : "transparent",
+              borderLeft: isActive
+                ? "4px solid #3b82f6"
+                : "4px solid transparent",
+              textDecoration: "none",
+              fontSize: "14px",
+              fontWeight: "500",
+              transition: "all 0.2s",
+            })}
+            className="sidebar-nav-item"
+          >
+            <item.icon size={20} />
+            <span>{item.name}</span>
+          </NavLink>
+        ))}
       </nav>
 
-      <div style={{ padding: "1rem", borderTop: "1px solid #334155" }}>
+      {/* Logout */}
+      <div
+        style={{
+          padding: "16px",
+          borderTop: "1px solid #1e293b",
+        }}
+      >
         <button
           onClick={handleLogout}
-          className="nav-item"
-          style={{ width: "100%", color: "#f87171" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            width: "100%",
+            padding: "12px 24px",
+            backgroundColor: "transparent",
+            color: "#f87171",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "14px",
+            fontWeight: "500",
+            cursor: "pointer",
+            transition: "background-color 0.2s",
+          }}
+          onMouseEnter={(e) => (e.target.style.backgroundColor = "#1e293b")}
+          onMouseLeave={(e) => (e.target.style.backgroundColor = "transparent")}
         >
           <LogOut size={20} />
-          <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>Logout</span>
+          <span>Logout</span>
         </button>
       </div>
-    </div>
+    </aside>
   );
 };
 

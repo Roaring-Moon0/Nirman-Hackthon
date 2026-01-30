@@ -10,6 +10,8 @@ export const AdminAuthProvider = ({ children }) => {
   useEffect(() => {
     // Check session on mount
     const authFlag = sessionStorage.getItem(ADMIN_AUTH_SESSION_KEY);
+    console.log("[AdminAuth] Mounting. Session storage flag:", authFlag);
+
     if (authFlag === "true") {
       setAdmin(true);
     } else {
@@ -19,8 +21,9 @@ export const AdminAuthProvider = ({ children }) => {
   }, []);
 
   const loginAdmin = (key) => {
+    console.log("[AdminAuth] loginAdmin called with key:", key);
     sessionStorage.setItem(ADMIN_AUTH_SESSION_KEY, "true");
-    sessionStorage.setItem(ADMIN_KEY_STORAGE, key); // Ensure key is stored for API calls
+    sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
     setAdmin(true);
   };
 

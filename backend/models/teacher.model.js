@@ -28,8 +28,14 @@ const teacherSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    assignedClasses: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Class",
+      },
+    ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const Teacher = mongoose.model("Teacher", teacherSchema);

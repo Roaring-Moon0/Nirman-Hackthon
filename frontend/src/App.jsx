@@ -1,26 +1,26 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import LoginPage from './pages/LoginPage';
-import StudentLayout from './layouts/StudentLayout';
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import LoginPage from "./pages/LoginPage";
+import StudentLayout from "./layouts/StudentLayout";
 
 // Student Pages
-import Dashboard from './pages/student/Dashboard';
-import Assignments from './pages/student/Assignments';
-import Attendance from './pages/student/Attendance';
-import Marks from './pages/student/Marks';
-import Notes from './pages/student/Notes';
-import Settings from './pages/student/Settings';
-import Teachers from './pages/student/Teachers';
+import Dashboard from "./pages/student/Dashboard";
+import Assignments from "./pages/student/Assignments";
+import Attendance from "./pages/student/Attendance";
+import Marks from "./pages/student/Marks";
+import Notes from "./pages/student/Notes";
+import Settings from "./pages/student/Settings";
+import Teachers from "./pages/student/Teachers";
 
 // Teacher Pages
-import TeacherLayout from './layouts/TeacherLayout';
-import TeacherDashboard from './pages/teacher/Dashboard';
-import TeacherAttendance from './pages/teacher/Attendance';
-import TeacherAssignments from './pages/teacher/Assignments';
+import TeacherLayout from "./layouts/TeacherLayout";
+import TeacherDashboard from "./pages/teacher/Dashboard";
+import TeacherAttendance from "./pages/teacher/Attendance";
+import TeacherAssignments from "./pages/teacher/Assignments";
 
-import TeacherAnalytics from './pages/teacher/Analytics';
-import TeacherStudents from './pages/teacher/Students';
+import TeacherAnalytics from "./pages/teacher/Analytics";
+import TeacherStudents from "./pages/teacher/Students";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, requiredRole }) => {
@@ -50,7 +50,7 @@ const LoginRoute = () => {
   const { isAuthenticated, user } = useAuth();
 
   if (isAuthenticated && user) {
-    if (user.role === 'teacher') {
+    if (user.role === "teacher") {
       return <Navigate to="/teacher" replace />;
     }
     return <Navigate to="/student/dashboard" replace />;
@@ -59,13 +59,16 @@ const LoginRoute = () => {
   return <LoginPage />;
 };
 
+import { ToastContainer } from "react-toastify";
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ToastContainer position="top-right" autoClose={3000} />
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
-          
+
           {/* Student Routes - Nested in Layout */}
           <Route
             path="/student"
@@ -84,7 +87,7 @@ function App() {
             <Route path="teachers" element={<Teachers />} />
             <Route path="settings" element={<Settings />} />
           </Route>
-          
+
           {/* Teacher Routes - Nested in Layout */}
           <Route
             path="/teacher"
@@ -101,7 +104,7 @@ function App() {
             <Route path="assignments" element={<TeacherAssignments />} />
             <Route path="analytics" element={<TeacherAnalytics />} />
           </Route>
-          
+
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

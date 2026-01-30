@@ -16,6 +16,10 @@ import {
   overrideAttendance,
   toggleUserStatus,
   resetPassword,
+  assignStudentsToClass,
+  unassignTeacherFromClass,
+  getTeacherAssignments,
+  getClassStudents,
 } from "../controllers/admin.controller.js";
 import { adminAuth } from "../middleware/admin.middleware.js";
 
@@ -44,8 +48,12 @@ router.patch("/attendance-override", adminAuth, overrideAttendance);
 router.patch("/user-status", adminAuth, toggleUserStatus);
 router.post("/reset-password", adminAuth, resetPassword);
 
-// TODO: Assign mapped routes if separate functionality needed
-// router.post("/assign-students", adminAuth, assignStudentsToClass); // Implemented via update? Or new?
+// Assignment Routes
+router.post("/assign-students", adminAuth, assignStudentsToClass);
+router.delete("/unassign-teacher", adminAuth, unassignTeacherFromClass);
+router.get("/teacher-assignments", adminAuth, getTeacherAssignments);
+router.get("/class-students", adminAuth, getClassStudents);
+
 router.get("/ping", adminAuth, (req, res) => {
   res.send("admin alive");
 });

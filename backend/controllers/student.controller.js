@@ -727,27 +727,49 @@ export const getStudentAttendanceHistory = async (req, res) => {
 /**
  * GET /my-teachers - Get all teachers assigned to student's class
  */
+/**
+ * GET /my-teachers - Get all teachers assigned to student's class
+ */
 export const getMyTeachers = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const student = await Student.findOne({ userId });
+    // 1. Strict Linkage: Fetch via Student -> assignedTeachers
+    const student = await Student.findOne({ userId })
+      .populate({
+        path: "assignedTeachers",
+        select: "name department email",
+        populate: {
+          path: "userId",
+          select: "email",
+        },
+      })
+      .populate("classId");
 
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const classAssignments = await ClassAssignment.find({
+    // 2. We also want Subject info. `assignedTeachers` is just a list of Teachers.
+    // To get subjects, we might still need ClassAssignment or check which teacher teaches what in this class.
+    // Let's use ClassAssignment to enrich the strict list with Subjects.
+    const assignments = await ClassAssignment.find({
       classId: student.classId,
-    })
-      .populate("teacherId", "name department email")
-      .populate("subjectId", "subjectName subjectCode");
+      teacherId: { $in: student.assignedTeachers.map((t) => t._id) },
+    }).populate("subjectId", "subjectName subjectCode");
 
-    const teachers = classAssignments.map((ca) => ({
-      teacherId: ca.teacherId._id,
-      name: ca.teacherId.name,
-      department: ca.teacherId.department,
-      subject: ca.subjectId.subjectName,
-      subjectCode: ca.subjectId.subjectCode,
+    // Map teacher ID to Subjects
+    const teacherSubjects = {};
+    assignments.forEach((a) => {
+      if (!teacherSubjects[a.teacherId]) teacherSubjects[a.teacherId] = [];
+      teacherSubjects[a.teacherId].push(a.subjectId);
+    });
+
+    const teachers = student.assignedTeachers.map((t) => ({
+      teacherId: t._id,
+      name: t.name,
+      department: t.department,
+      subjects: teacherSubjects[t._id] || [], // List of subjects this teacher teaches
+      email: t.userId?.email || "N/A",
     }));
 
     res.json({ teachers });

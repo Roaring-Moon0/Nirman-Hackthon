@@ -62,10 +62,13 @@ export const getTeacherComprehensiveDashboard = async (req, res) => {
 
     for (const assignment of classAssignments) {
       const classId = assignment.classId._id;
-      
+
       // Get all students in class
-      const students = await Student.find({ classId });
-      
+      const students = await Student.find({ classId }).populate(
+        "userId",
+        "email",
+      );
+
       // Calculate risk for each student
       const riskSummary = {
         highRisk: 0,
@@ -78,11 +81,11 @@ export const getTeacherComprehensiveDashboard = async (req, res) => {
         try {
           const riskAssessment = await generateRiskAssessment(
             student._id,
-            classId
+            classId,
           );
 
           const riskLabel = riskAssessment.risk.label;
-          
+
           if (riskLabel === "high" || riskLabel.includes("high")) {
             riskSummary.highRisk++;
             riskSummary.students.push({
@@ -100,7 +103,7 @@ export const getTeacherComprehensiveDashboard = async (req, res) => {
         } catch (error) {
           console.warn(
             `Error calculating risk for student ${student._id}:`,
-            error.message
+            error.message,
           );
         }
       }
@@ -109,6 +112,12 @@ export const getTeacherComprehensiveDashboard = async (req, res) => {
         class: assignment.classId,
         subject: assignment.subjectId,
         totalStudents: students.length,
+        students: students.map((s) => ({
+          _id: s._id,
+          name: s.name,
+          rollNo: s.rollNo,
+          email: s.userId?.email, // populated validation needed? userId not populated in find above yet
+        })),
         riskSummary,
       });
     }
@@ -123,9 +132,7 @@ export const getTeacherComprehensiveDashboard = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching comprehensive dashboard:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to load comprehensive dashboard" });
+    res.status(500).json({ message: "Failed to load comprehensive dashboard" });
   }
 };
 
@@ -146,7 +153,10 @@ export const getClassHighRiskStudents = async (req, res) => {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
-    const students = await Student.find({ classId }).populate("userId", "loginId");
+    const students = await Student.find({ classId }).populate(
+      "userId",
+      "loginId",
+    );
 
     const highRiskStudents = [];
 
@@ -154,7 +164,7 @@ export const getClassHighRiskStudents = async (req, res) => {
       try {
         const riskAssessment = await generateRiskAssessment(
           student._id,
-          classId
+          classId,
         );
 
         if (
@@ -174,7 +184,7 @@ export const getClassHighRiskStudents = async (req, res) => {
       } catch (error) {
         console.warn(
           `Error calculating risk for student ${student._id}:`,
-          error.message
+          error.message,
         );
       }
     }
@@ -214,9 +224,8 @@ export const getStudentAnalytics = async (req, res) => {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
-    const student = await Student.findById(studentId).populate(
-      "classId userId"
-    );
+    const student =
+      await Student.findById(studentId).populate("classId userId");
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -248,12 +257,14 @@ export const getStudentAnalytics = async (req, res) => {
       filePath: { $exists: true, $ne: null },
     });
     const submissionRate =
-      totalAssignments > 0 ? (submittedAssignments / totalAssignments) * 100 : 0;
+      totalAssignments > 0
+        ? (submittedAssignments / totalAssignments) * 100
+        : 0;
 
     // Get risk assessment
     const riskAssessment = await generateRiskAssessment(
       studentId,
-      student.classId._id
+      student.classId._id,
     );
 
     res.json({
@@ -285,22 +296,58 @@ export const getStudentAnalytics = async (req, res) => {
 
 export const getTeacherClasses = async (req, res) => {
   try {
-    const teacher = await Teacher.findOne({ userId: req.user.userId });
+    // Populate the assignedClasses directly from Teacher model
+    const teacher = await Teacher.findOne({ userId: req.user.userId }).populate(
+      {
+        path: "assignedClasses",
+        select: "classCode year section department",
+        populate: {
+          path: "teachers", // Optional: see co-teachers
+          select: "name",
+        },
+      },
+    );
 
     if (!teacher) {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
+    // Transform for frontend format
+    // Note: We might miss 'subjectId' if we strictly use assignedClasses (which is just Class).
+    // BUT the Teacher model doesn't store Subject in the array (only Class).
+    // The requirement "Teacher > Class > Student" is satisfied.
+    // However, if the frontend NEEDS subject, we must fallback to ClassAssignment OR we need to add subject to the array structure.
+    // The user said: "Teacher MUST see: All classes assigned to them... Subjects taught".
+    // My Strict Update added `assignedClasses: [ObjectId]`. This loses the Subject mapping if we ignore ClassAssignment.
+    // So for "Classes", we can use the direct array. For "Subjects", we still need ClassAssignment or a richer array.
+    // User said: "USE EXISTING MODELS if present".
+    // I will stick to ClassAssignment for the RICH detail (Subject), but verify against assignedClasses if needed.
+    // Actually, sticking to ClassAssignment is SAFER for the Subject breakdown.
+    // Let's just ensure the response includes the students as requested "Response MUST include: ... Students inside each class".
+
+    // Let's hybridize: Get Assignments, but also ensure we fetch ALL students from the class using the strict link.
     const classAssignments = await ClassAssignment.find({
       teacherId: teacher._id,
     })
       .populate("classId", "classCode year section department")
       .populate("subjectId", "subjectName subjectCode");
 
-    const classes = classAssignments.map((assignment) => ({
-      class: assignment.classId,
-      subject: assignment.subjectId,
-    }));
+    const classes = await Promise.all(
+      classAssignments.map(async (assignment) => {
+        // STRICT REQUIREMENT: "Students inside each class"
+        // We fetch students using the Class ID directly.
+        const students = await Student.find({ classId: assignment.classId._id })
+          .select("name rollNo userId")
+          .populate("userId", "email");
+
+        return {
+          class: assignment.classId,
+          subject: assignment.subjectId,
+          students: students, // Added students list as requested
+          studentCount: students.length,
+        };
+      }),
+    );
 
     res.json({
       classes,
@@ -355,4 +402,3 @@ export const getStudentsByClass = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch students" });
   }
 };
-

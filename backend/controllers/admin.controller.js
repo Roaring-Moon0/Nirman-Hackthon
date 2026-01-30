@@ -137,20 +137,18 @@ export const assignTeacherToClass = async (req, res) => {
   try {
     const { teacherId, classId, subjectId } = req.body;
 
-    // Validation
     if (!teacherId || !classId || !subjectId) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Check if assignment already exists
+    // 1. Maintain Junction Table (Optional but good for history/subjects)
     const existing = await ClassAssignment.findOne({
       teacherId,
       classId,
       subjectId,
     });
-
     if (existing) {
-      return res.status(400).json({ message: "As1signment already exists" });
+      return res.status(400).json({ message: "Assignment already exists" });
     }
 
     const assignment = await ClassAssignment.create({
@@ -159,8 +157,26 @@ export const assignTeacherToClass = async (req, res) => {
       subjectId,
     });
 
-    console.log(`[DEBUG] ClassAssignment Saved! ID: ${assignment._id}`);
-    console.log(`[DEBUG] Verify manually in collection: 'classassignments'`);
+    // 2. Strict Linkage Updates
+    // A. Add Class to Teacher
+    await Teacher.findByIdAndUpdate(teacherId, {
+      $addToSet: { assignedClasses: classId },
+    });
+
+    // B. Add Teacher to Class
+    await Class.findByIdAndUpdate(classId, {
+      $addToSet: { teachers: teacherId },
+    });
+
+    // C. Auto-link Teacher to ALL Students in that Class
+    await Student.updateMany(
+      { classId: classId },
+      { $addToSet: { assignedTeachers: teacherId } },
+    );
+
+    console.log(
+      `[DEBUG] Full Linkage Complete: Teacher ${teacherId} <-> Class ${classId}`,
+    );
 
     res.status(201).json({
       message: "Teacher assigned successfully",
@@ -178,7 +194,6 @@ export const createTimetable = async (req, res) => {
     const { classId, subjectId, teacherId, dayOfWeek, startTime, endTime } =
       req.body;
 
-    // Validation
     if (
       !classId ||
       !subjectId ||
@@ -190,7 +205,6 @@ export const createTimetable = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Check conflict (simple check: same teacher at same time)
     const conflict = await Timetable.findOne({
       teacherId,
       dayOfWeek,
@@ -211,8 +225,6 @@ export const createTimetable = async (req, res) => {
       startTime,
       endTime,
     });
-
-    console.log(`[DEBUG] Timetable Saved! ID: ${timetable._id}`);
 
     res.status(201).json({
       message: "Timetable created successfully",
@@ -246,20 +258,17 @@ export const getDashboardStats = async (req, res) => {
 /* ================= GET ALL USERS (Students & Teachers) ================= */
 export const getAllUsers = async (req, res) => {
   try {
-    // Fetch students with class info
     const students = await Student.find({ isActive: true }).populate(
       "classId",
       "classCode",
     );
-    // Fetch teachers
     const teachers = await Teacher.find({ isActive: true });
 
-    // Format response
     const formattedStudents = students.map((s) => ({
       id: s._id,
       name: s.name,
       role: "Student",
-      info: s.rollNo, // Display Roll No
+      info: s.rollNo,
       status: s.isActive ? "Active" : "Inactive",
       classCode: s.classId?.classCode || "N/A",
     }));
@@ -268,7 +277,7 @@ export const getAllUsers = async (req, res) => {
       id: t._id,
       name: t.name,
       role: "Teacher",
-      info: t.department, // Display Dept
+      info: t.department,
       status: t.isActive ? "Active" : "Inactive",
     }));
 
@@ -306,10 +315,6 @@ export const deleteTeacher = async (req, res) => {
     const teacher = await Teacher.findById(id);
     if (!teacher) return res.status(404).json({ message: "Teacher not found" });
 
-    // Deactivate instead of hard delete to preserve history (recommended for ERP)
-    // But requirement says "Delete", ensuring dependencies check.
-
-    // Check assignments
     const assignments = await ClassAssignment.find({ teacherId: id });
     if (assignments.length > 0) {
       return res
@@ -320,7 +325,6 @@ export const deleteTeacher = async (req, res) => {
         });
     }
 
-    // Delete User and Teacher
     await User.findByIdAndDelete(teacher.userId);
     await Teacher.findByIdAndDelete(id);
 
@@ -338,14 +342,8 @@ export const deleteStudent = async (req, res) => {
     const student = await Student.findById(id);
     if (!student) return res.status(404).json({ message: "Student not found" });
 
-    // Check data dependencies? Usually we want to keep academic record.
-    // For now, we'll Soft Delete by deactivating, or Hard Delete if requested.
-    // Prompt implies immediate action. Let's do Hard Delete but warn if active.
-
     await User.findByIdAndDelete(student.userId);
     await Student.findByIdAndDelete(id);
-    // Optional: Delete attendance/marks or keep them as orphaned records?
-    // Usually keep for analytics, but let's stick to simple deletion for now.
 
     res.status(200).json({ message: "Student deleted successfully" });
   } catch (err) {
@@ -358,8 +356,6 @@ export const deleteStudent = async (req, res) => {
 export const deleteClass = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Check if students exist in this class
     const studentCount = await Student.countDocuments({ classId: id });
     if (studentCount > 0) {
       return res
@@ -368,7 +364,6 @@ export const deleteClass = async (req, res) => {
           message: `Cannot delete: Class has ${studentCount} students.`,
         });
     }
-
     await Class.findByIdAndDelete(id);
     res.status(200).json({ message: "Class deleted successfully" });
   } catch (err) {
@@ -380,28 +375,15 @@ export const deleteClass = async (req, res) => {
 export const overrideAttendance = async (req, res) => {
   try {
     const { attendanceId, isPresent, reason } = req.body;
-
-    // Admin can override at ANY time, even after 11:59 PM.
-
-    /* 
-       We might receive attendanceId directly OR studentId+date+classId.
-       Let's assume we receive attendanceId for update, or enough info to find it.
-       If creating new override for missing record, we need more info.
-       For this v1, let's assume updating an existing record or 'upsert'.
-    */
-
-    // For simplicity, let's assume we edit an existing record found via analytics/list
-    if (!attendanceId) {
+    if (!attendanceId)
       return res.status(400).json({ message: "Attendance ID required" });
-    }
 
-    const attendance = await import("../models/Attendance.js").then((m) =>
-      m.Attendance.findById(attendanceId),
-    );
+    // Dynamic import to avoid circular dependency issues if any
+    const { Attendance } = await import("../models/Attendance.js");
+    const attendance = await Attendance.findById(attendanceId);
 
-    if (!attendance) {
+    if (!attendance)
       return res.status(404).json({ message: "Attendance record not found" });
-    }
 
     attendance.isPresent = isPresent;
     attendance.isOverridden = true;
@@ -421,14 +403,12 @@ export const overrideAttendance = async (req, res) => {
 export const toggleUserStatus = async (req, res) => {
   try {
     const { userId, isActive } = req.body;
-
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     user.isActive = isActive;
     await user.save();
 
-    // Also update specific role model
     if (user.role === "student") {
       await Student.updateOne({ userId: user._id }, { isActive });
     } else if (user.role === "teacher") {
@@ -451,11 +431,156 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: "New password required" });
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     await User.findByIdAndUpdate(userId, { password: hashedPassword });
 
     res.status(200).json({ message: "Password reset successfully" });
   } catch (err) {
     res.status(500).json({ message: "Failed to reset password" });
+  }
+};
+
+/* ================= ASSIGN STUDENTS TO CLASS ================= */
+export const assignStudentsToClass = async (req, res) => {
+  try {
+    const { classId, studentIds } = req.body;
+
+    if (
+      !classId ||
+      !studentIds ||
+      !Array.isArray(studentIds) ||
+      studentIds.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Class ID and a list of Student IDs are required" });
+    }
+
+    const classExists = await Class.findById(classId);
+    if (!classExists) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    // 1. Update Students: Set classId
+    const result = await Student.updateMany(
+      { _id: { $in: studentIds } },
+      { $set: { classId: classId } },
+    );
+
+    // 2. Add Students to Class Array
+    await Class.findByIdAndUpdate(classId, {
+      $addToSet: { students: { $each: studentIds } },
+    });
+
+    // 3. Auto-link Class Teachers to these Students
+    // If the class already has teachers, map them to the new students
+    if (classExists.teachers && classExists.teachers.length > 0) {
+      await Student.updateMany(
+        { _id: { $in: studentIds } },
+        { $addToSet: { assignedTeachers: { $each: classExists.teachers } } },
+      );
+    }
+
+    res.status(200).json({
+      message: `${result.modifiedCount} students assigned to ${classExists.classCode}`,
+    });
+  } catch (err) {
+    console.error("Assign students error:", err);
+    res.status(500).json({ message: "Failed to assign students" });
+  }
+};
+
+/* ================= UNASSIGN TEACHER ================= */
+export const unassignTeacherFromClass = async (req, res) => {
+  try {
+    const { assignmentId, teacherId, classId, subjectId } = req.body;
+
+    // Find the assignment first to get IDs if only assignmentId provided
+    let query = {};
+    if (assignmentId) query = { _id: assignmentId };
+    else if (teacherId && classId && subjectId)
+      query = { teacherId, classId, subjectId };
+    else
+      return res
+        .status(400)
+        .json({ message: "Insufficient data to identify assignment" });
+
+    const assignment = await ClassAssignment.findOne(query);
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    const { teacherId: tId, classId: cId } = assignment;
+
+    // 1. Remove Junction
+    await ClassAssignment.findByIdAndDelete(assignment._id);
+
+    // 2. Strict Linkage Cleanup
+    // A. Remove Class from Teacher
+    await Teacher.findByIdAndUpdate(tId, {
+      $pull: { assignedClasses: cId },
+    });
+
+    // B. Remove Teacher from Class
+    await Class.findByIdAndUpdate(cId, {
+      $pull: { teachers: tId },
+    });
+
+    // C. Remove Teacher from Students in that Class
+    await Student.updateMany(
+      { classId: cId },
+      { $pull: { assignedTeachers: tId } },
+    );
+
+    res.status(200).json({ message: "Teacher unassigned successfully" });
+  } catch (err) {
+    console.error("Unassign teacher error:", err);
+    res.status(500).json({ message: "Failed to unassign teacher" });
+  }
+};
+
+/* ================= GET TEACHER ASSIGNMENTS ================= */
+export const getTeacherAssignments = async (req, res) => {
+  try {
+    const assignments = await ClassAssignment.find()
+      .populate("teacherId", "name employeeId department")
+      .populate("classId", "classCode section year")
+      .populate("subjectId", "subjectName subjectCode")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(assignments);
+  } catch (err) {
+    console.error("Get assignments error:", err);
+    res.status(500).json({ message: "Failed to fetch assignments" });
+  }
+};
+
+/* ================= GET CLASS STUDENTS ================= */
+export const getClassStudents = async (req, res) => {
+  try {
+    const { classId } = req.query;
+    let query = { isActive: true };
+
+    if (classId) {
+      query.classId = classId;
+    }
+
+    const students = await Student.find(query)
+      .populate("classId", "classCode section year")
+      .sort({ "classId.classCode": 1, rollNo: 1 });
+
+    const data = students.map((s) => ({
+      _id: s._id,
+      name: s.name,
+      rollNo: s.rollNo,
+      classId: s.classId?._id,
+      className: s.classId
+        ? `${s.classId.classCode} (Year ${s.classId.year})`
+        : "Unassigned",
+    }));
+
+    res.status(200).json(data);
+  } catch (err) {
+    console.error("Get class students error:", err);
+    res.status(500).json({ message: "Failed to fetch students" });
   }
 };
